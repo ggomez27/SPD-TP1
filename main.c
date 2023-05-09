@@ -4,149 +4,73 @@
 #include <time.h>
 #include <string.h>
 #include <math.h>
-
-#define MAX_LINE_LENGTH 100
-
-void imprimir(unsigned *array, int size){
-    int i;
-    for(i=0; i<size; i++)
-        printf("%u ", array[i]+1);
-    puts("");
-}
-
-int comp(const void * elem1, const void * elem2){
-    Path f = *((Path*)elem1);
-    Path s = *((Path*)elem2);
-    if(f.fitness < s.fitness) return 1;
-    if(f.fitness > s.fitness) return -1;
-    return 0;
-}
+#include <pthread.h>
 
 int main(int argc, char *argv[]){
-    int i;
-    
-    City cityArray[MAX_PATH_SIZE];
-    
-    int cityCount = readFile("data/wi29.tsp", cityArray);
+
+    puts("Reading file...");
+    cityCount = readFile("data/wi29.tsp");
 
     if(cityCount == -1)
         return -1;
     
-    printf("cityCount= %u\n", cityCount);
-        
-    unsigned iteration = 0;
-    int populationSize = POPULATION_SIZE;
-    int eliteSize = ELITE_SIZE;
-    int iterationCount = ITERATION_COUNT;
-    double mutationRate = MUTATION_RATE;
-    
-    if(eliteSize>= populationSize)
-        puts("El tamaño definido para la seleccion por Elitismo es mayor al tamaño de poblacion. La seleccion tomara el total de la poblacion.");
-    
-    
+    printf("%i cities have been loaded\n", cityCount);
 
-    //Crear populacion y calcular fitness basado en 1/distancia total (paralelizable y sin memoria compartida)
+    if(eliteSize >= populationSize)
+        puts("El tamaño definido para la seleccion por Elitismo es mayor o igual al tamaño de poblacion. La seleccion tomara el total de la poblacion.");
+    
+    // Memoria que se compartira entre los hilos. Los hilos trabajan siempre en los indices ThreadID + i * ThreadCount, evitando asi colisiones.
+    
     Path population[populationSize];
-    for(i = 0; i < populationSize; i++){
-        population[i] = createIndividual(cityArray,cityCount);
-    }
+    Path pool[populationSize];
+    Ranking ranking[populationSize];
+    int selection[populationSize];
 
-    double minDist = 0;
+    // Estructura de datos para la memoria compartida.
+    DataStruct data;
+    data.pool = NULL;
+    data.population = population;
+    data.ranking = ranking;
+    data.selection = selection;
+    
+
+    puts("Starting GA");
+    unsigned iteration = 0;
     // Comienzo del Algoritmo Genetico
     while((iteration++)<iterationCount) {
-        
-        // Ranking y Seleccion
-        qsort(population, sizeof(population)/sizeof(*population),sizeof(*population),comp);
-        
-        static int val = 0;
-        if(val==0){
-            minDist=population[0].distance;
-            printf("Current min: %lf [%u]\n", minDist, iteration);
-            val=1;
-        }
-        else{
-            if(population[0].distance<minDist){
-                minDist=population[0].distance;
-            printf("Current min: %lf [%u]\n", minDist, iteration);
-            }
-        }
-        // Suma de todos los valores de Fitness. Paralelizable con memoria compartida
-        double sum = 0;
-        for(i = 0; i < populationSize; i++)
-            sum += population[i].fitness;
 
-        double perc[populationSize];
-        double cumulativeSum = 0.0;
+        // pIterateGeneration ejecuta en paralelo, sIterateGeneration en serie.
+        pIterateGeneration(data);
 
-        // Si la suma cumulativa se calculara y almacenara por separado (no paralelizable), lo siguiente seria paralelizable
-        for(i = 0; i < populationSize; i++){
-            cumulativeSum += population[i].fitness;
-            perc[i] = cumulativeSum / sum;
+        // Luego de hacer el join de los hilos, se prepara el pool para criar la siguiente generacion.
+        for(int i = 0; i < populationSize; i++){
+            pool[i]=population[selection[i]];
         }
 
-        // Seleccion. Paralelizable sin memoria compartida
-        unsigned selection[populationSize];
-        for(i = 0; i < populationSize; i++){
-            if(i<eliteSize){
-                selection[i] = i;
-                continue;
-            }
-            double pick = randmm();
-            int j;
-            for(j = 0; j < populationSize; j++){
-                if(pick <= perc[j]){
-                    selection[i]=j;
-                    break;
-                }
-            }
-        }
+        // Esta asignacion solo es relevante en la primera iteracion, para indicar al algoritmo que ya se cuenta con una poblacion para procrear.
+        if(iteration==1)
+            data.pool=pool;
 
-        // 
-
-        // Breeding. Paralelizable sin memoria compartida
-        Path newPopulation[populationSize];
-        for(i = 0; i < populationSize; i++){
-            if(i<eliteSize){
-                newPopulation[i]=population[i];
-                continue;
-            }
-            unsigned breeder = populationSize+eliteSize-i-1;
-            if(i!=breeder)
-                orderedCrossover(newPopulation[i].cities,
-                    population[i].cities,
-                    population[breeder].cities,
-                    cityCount);
-            else newPopulation[i]=population[i];
-            mutate(newPopulation[i].cities,mutationRate, cityCount);
-            newPopulation[i].distance=calculateDistance(newPopulation[i].cities,cityArray,cityCount);
-            newPopulation[i].fitness=1.0 / newPopulation[i].distance;
-        }
-        
-
-        // Paralelizable sin memoria compartida
-        for(i = 0; i < populationSize; i++){
-            population[i]=newPopulation[i];
-        }
-
-    };
+    }
 
     double min = population[0].distance;
     unsigned minIndex = 0;
-    for(i = 1; i < populationSize; i++){
+    for(int i = 1; i < populationSize; i++){
         if(population[i].distance<min){
             min=population[i].distance;
             minIndex=i;
         }
     }
 
-    imprimir(population[minIndex].cities, cityCount);
-    printf("Distancia minima: %lf\n", population[minIndex].distance);
+    // Imprime el resultado.
+    puts("Done.\nResults:");
+    printPath(population[minIndex]);
 
     return 0;
 }
 
 
-int readFile(const char *str, City *cityArray) {
+int readFile(const char *str) {
     char line[MAX_LINE_LENGTH];
     FILE *myfile = fopen(str, "r");
 
@@ -155,7 +79,7 @@ int readFile(const char *str, City *cityArray) {
         while (fgets(line, MAX_LINE_LENGTH, myfile) != NULL) {
             if (strncmp(line, "DIMENSION", 9) == 0) {
                 value = atoi(&line[12]);
-                printf("value: %d\n", value);
+                // printf("value: %d\n", value);
                 if(value>MAX_PATH_SIZE){
                     puts("Dimension is too big");
                     return -1;
@@ -182,7 +106,7 @@ int readFile(const char *str, City *cityArray) {
             c.y = strtof(res[2], NULL);
             cityArray[index].x = c.x;
             cityArray[index].y = c.y;
-            printf("Ciudad %d: (%.5f, %.5f)\n", index, cityArray[index].x, cityArray[index].y);
+            // printf("Ciudad %d: (%.5f, %.5f)\n", index, cityArray[index].x, cityArray[index].y);
             free(res);
             index++;
           }
@@ -205,33 +129,36 @@ double distanceBetween(City a, City b){
     return sqrt(pow(a.x - b.x,2.0) + pow(a.y - b.y,2.0));
 }
 
-double calculateDistance(unsigned * individual, City *cityArray, int size){
+double calculateDistance(unsigned * individual){
     unsigned i, a, b;
     double distance = 0.0;
-    for(i = 0; i < size; i++){
-        a = individual[i], b = individual[(i+1)%size];
+    for(i = 0; i < cityCount; i++){
+        a = individual[i], b = individual[(i+1)%cityCount];
         distance += distanceBetween(cityArray[a],cityArray[b]);
     }
     return distance;
 }
 
-Path createIndividual(City *cityArray, int size){
+double calculateFitness(double distance){
+    return  1.0 / distance;
+}
+
+Path createIndividual(){
     Path individual;
-    individual.distance = permutate(individual.cities,cityArray,size);
-    individual.fitness= 1.0 / individual.distance;
+    individual.distance = permutate(individual.cities);
     return individual;
 }
 
-double permutate(unsigned * individual, City *cityArray, int size){
+double permutate(unsigned * individual){
     unsigned i, a, b;
     double distance = 0;
-    char values[size];
-    for(i = 0; i < size; i++)
+    char values[cityCount];
+    for(i = 0; i < cityCount; i++)
         values[i] = 0;
-    for(i = 0; i < size; i++){
+    for(i = 0; i < cityCount; i++){
         unsigned index;
         do{
-            index = rand()%size;
+            index = rand()%cityCount;
         } while(values[index]);
         individual[i] = index;
         values[index] = 1;
@@ -241,18 +168,18 @@ double permutate(unsigned * individual, City *cityArray, int size){
             distance += distanceBetween(cityArray[a],cityArray[b]);
         }
     }
-    a = individual[0], b = individual[size-1];
+    a = individual[0], b = individual[cityCount-1];
     return distance + distanceBetween(cityArray[a],cityArray[b]);
 }
 
-void orderedCrossover(unsigned *child, unsigned *parent1, unsigned *parent2, int size){
+void orderedCrossover(unsigned *child, unsigned *parent1, unsigned *parent2){
     
     // Rango del subArray desde 0 hasta size-1 inclusivo.
-    unsigned subArraySize = rand()%(size);
-    unsigned subArrayPosition = rand()%(size-subArraySize);
+    unsigned subArraySize = rand()%(cityCount);
+    unsigned subArrayPosition = rand()%(cityCount-subArraySize);
     unsigned i;
-    char values[size];
-    for(i = 0; i < size; i++)
+    char values[cityCount];
+    for(i = 0; i < cityCount; i++)
         values[i] = 0;
 
     // Copiar el subArray del parent 1 en su misma posicion
@@ -262,7 +189,7 @@ void orderedCrossover(unsigned *child, unsigned *parent1, unsigned *parent2, int
     }
 
     int j = 0;
-    for(i = 0; i < size; i++){
+    for(i = 0; i < cityCount; i++){
         // Saltar los elementos ya copiados
         if(subArraySize != 0 && i == subArrayPosition){
             i+=subArraySize-1;
@@ -276,15 +203,133 @@ void orderedCrossover(unsigned *child, unsigned *parent1, unsigned *parent2, int
     }
 }
 
-void mutate(unsigned *individual, double mutationRate, int size){
+void mutate(unsigned *individual, double mutationRate){
     unsigned index;
-    for(index = 0; index < size; index++){
+    for(index = 0; index < cityCount; index++){
         if(randmm() < mutationRate){
             // No se garantiza que la mutacion sea efectiva: puede hacer un swap en un mismo lugar.
-            unsigned swapIndex = rand()%size;
+            unsigned swapIndex = rand()%cityCount;
             unsigned aux = individual[index];
             individual[index] = individual[swapIndex];
             individual[swapIndex] = aux;
         }
     }
+}
+
+/**
+ * Esta funcion ejecuta el algoritmo genetico casi completamente. Lo unico que no realiza, es la copia de los individuos
+ * seleccionados de la poblacion al pool. Esto debe realizarse fuera de esta funcion, porque al paralelizar esta funcion,
+ * la seleccion se finaliza recien al realizar el join (cada hilo ya escogio sus mejores candidatos).
+*/
+void _IterateGeneration(DataStruct arg, int itStart, int itIncrement){
+    Path * population = arg.population;
+    Path * pool = arg.pool;
+    Ranking * ranking = arg.ranking;
+    int * selection = arg.selection;
+    
+    // Si pool es nulo, debo crear mi poblacion. 
+    if(!pool){
+        for(int i = itStart; i < populationSize; i+=itIncrement)
+            population[i] = createIndividual();
+    }
+    else{ 
+    // Inicio del Breeding.
+        for(int i = itStart; i < populationSize; i+=itIncrement){
+            if(i<eliteSize){
+                population[i]=pool[i];
+                continue;
+            }
+            unsigned parent = i-eliteSize;
+            unsigned breeder = populationSize+eliteSize-i-1;
+            if(parent!=breeder)
+                orderedCrossover(population[i].cities,
+                    pool[parent].cities,
+                    pool[breeder].cities);
+            else population[i]=pool[parent];
+            mutate(population[i].cities,mutationRate);
+            population[i].distance=calculateDistance(population[i].cities);
+        }
+    }
+
+    // Inicio del Ranking
+    char values[populationSize];
+    for(int i = itStart; i < populationSize; i+=itIncrement)
+        values[i] = 0;
+    for(int i = itStart; i < populationSize; i+=itIncrement){
+        unsigned maxIndex=0;
+        double maxFitness = -1.0;
+        for(int j = itStart; j < populationSize; j+=itIncrement){
+            double fitness = calculateFitness(population[j].distance);
+            if(values[j] == 0 && fitness > maxFitness)
+                maxIndex=j, maxFitness=fitness;
+        }
+        ranking[i].index=maxIndex, ranking[i].fitness=maxFitness, values[maxIndex]=1;
+    }
+
+    // Inicio de Seleccion
+    double sum = 0.0;
+    double perc[populationSize];
+    double cumulativeSum = 0.0;
+
+    // Sumatoria de los valores de Fitness.
+    for(int i = itStart; i < populationSize; i+=itIncrement)
+        sum += ranking[i].fitness;
+
+    // Determinacion de probabilidad para la Seleccion. 
+    for(int i = itStart; i < populationSize; i+=itIncrement){
+        unsigned index = ranking[i].index;
+        cumulativeSum += ranking[index].fitness;
+        perc[index] = cumulativeSum / sum;
+    }
+    
+    // Se elige al azar de la poblacion, basado en las probabilidades determinadas anteriormente.
+    for(int i = itStart; i < populationSize; i+=itIncrement){
+        if(i<eliteSize){
+            selection[i] = ranking[i].index;
+            continue;
+        }
+        double pick = randmm();
+        int j;
+        for(j = itStart; j < populationSize; j+=itIncrement){
+            unsigned index = ranking[j].index;
+            if(pick <= perc[index]){
+                selection[i]=index;
+                
+                break;
+            }
+        }
+    }
+}
+
+void sIterateGeneration(DataStruct data){
+    _IterateGeneration(data,0,1);
+}
+
+void * _pIterateGeneration(void * arg){
+    PThreadArg pTArg = *((PThreadArg*) arg);
+    _IterateGeneration(pTArg.data,pTArg.tid,threadCount);
+}
+
+void pIterateGeneration(DataStruct data){
+    PThreadArg arg[threadCount];
+    pthread_t tids[threadCount];
+
+    for(int tid = 0; tid < threadCount; ++tid) {
+        arg[tid].tid=tid;
+        arg[tid].data=data;
+        pthread_create(&tids[tid], NULL, _pIterateGeneration, &arg[tid]);
+    }
+
+    for (int tid = 0; tid < threadCount; ++tid) {
+		pthread_join(tids[tid], NULL);
+	}
+
+}
+
+void printPath(Path array){
+    int i;
+    printf("Path = ");
+    for(i=0; i<cityCount; i++)
+        printf("%u ", array.cities[i]+1);
+    printf("\nPath Distance = %lf\n", array.distance);
 }
