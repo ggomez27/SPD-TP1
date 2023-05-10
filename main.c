@@ -7,9 +7,12 @@
 #include <pthread.h>
 
 int main(int argc, char *argv[]){
+    // timer start
+	struct timespec ts_start;
+	clock_gettime(CLOCK_MONOTONIC, &ts_start);
 
     puts("Reading file...");
-    cityCount = readFile("data/wi29.tsp");
+    cityCount = readFile("data/dj38.tsp");
 
     if(cityCount == -1)
         return -1;
@@ -66,7 +69,18 @@ int main(int argc, char *argv[]){
     puts("Done.\nResults:");
     printPath(population[minIndex]);
 
+
+    struct timespec ts_stop;
+	clock_gettime(CLOCK_MONOTONIC, &ts_stop);
+	double start = (double)ts_start.tv_sec + (double)ts_start.tv_nsec/1000000000.0;
+	double stop = (double)ts_stop.tv_sec + (double)ts_stop.tv_nsec/1000000000.0;
+	double elapsed = (stop - start);
+
+    // display results
+	printf ("Time = %f\n",elapsed);
+
     return 0;
+    
 }
 
 
