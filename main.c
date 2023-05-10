@@ -9,10 +9,13 @@
 int main(int argc, char *argv[]){
     // timer start
 	struct timespec ts_start;
+
+    srand(time(NULL));
+    
 	clock_gettime(CLOCK_MONOTONIC, &ts_start);
 
     puts("Reading file...");
-    cityCount = readFile("data/dj38.tsp");
+    cityCount = readFile("data/wi29.tsp");
 
     if(cityCount == -1)
         return -1;
@@ -322,6 +325,7 @@ void sIterateGeneration(DataStruct data){
 void * _pIterateGeneration(void * arg){
     PThreadArg pTArg = *((PThreadArg*) arg);
     _IterateGeneration(pTArg.data,pTArg.tid,threadCount);
+    pthread_exit(NULL);
 }
 
 void pIterateGeneration(DataStruct data){
