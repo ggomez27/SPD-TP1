@@ -7,7 +7,7 @@
 #define ELITE_SIZE 10
 #define MUTATION_RATE 0.01
 #define MAX_LINE_LENGTH 100
-#define NUM_THREAD 8
+#define NUM_THREAD 4
 
 // Representacion de una Ciudad como un par de coordenadas (x,y)
 typedef struct city{

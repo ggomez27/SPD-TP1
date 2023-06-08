@@ -319,9 +319,7 @@ void _IterateGeneration(DataStruct arg, int itStart, int itIncrement){
 }
 
 void sIterateGeneration(DataStruct data){
-    for(int i = 0; i < threadCount; i++){
-        _IterateGeneration(data,i,threadCount);
-    }
+    _IterateGeneration(data,0,1);
     
 }
 
