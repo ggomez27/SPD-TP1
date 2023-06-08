@@ -7,7 +7,7 @@
 #define ELITE_SIZE 10
 #define MUTATION_RATE 0.01
 #define MAX_LINE_LENGTH 100
-#define NUM_THREAD 4
+#define NUM_THREAD 8
 
 // Representacion de una Ciudad como un par de coordenadas (x,y)
 typedef struct city{
@@ -33,12 +33,6 @@ typedef struct dataStruct{
     Ranking * ranking;
     int * selection;
 } DataStruct;
-
-// Estructura de Datos del argumento pasado cuando se llama a un nuevo pThread
-typedef struct pThreadArg{
-    int tid;
-    DataStruct data;
-} PThreadArg;
 
 // Funcion que crea un individuo de forma randomica
 Path createIndividual();

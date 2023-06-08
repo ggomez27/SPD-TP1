@@ -4,7 +4,7 @@
 #include <time.h>
 #include <string.h>
 #include <math.h>
-#include <pthread.h>
+#include <omp.h>
 
 int main(int argc, char *argv[]){
     // timer start
@@ -319,29 +319,18 @@ void _IterateGeneration(DataStruct arg, int itStart, int itIncrement){
 }
 
 void sIterateGeneration(DataStruct data){
-    _IterateGeneration(data,0,1);
-}
-
-void * _pIterateGeneration(void * arg){
-    PThreadArg pTArg = *((PThreadArg*) arg);
-    _IterateGeneration(pTArg.data,pTArg.tid,threadCount);
-    pthread_exit(NULL);
+    for(int i = 0; i < threadCount; i++){
+        _IterateGeneration(data,i,threadCount);
+    }
+    
 }
 
 void pIterateGeneration(DataStruct data){
-    PThreadArg arg[threadCount];
-    pthread_t tids[threadCount];
-
-    for(int tid = 0; tid < threadCount; ++tid) {
-        arg[tid].tid=tid;
-        arg[tid].data=data;
-        pthread_create(&tids[tid], NULL, _pIterateGeneration, &arg[tid]);
-    }
-
-    for (int tid = 0; tid < threadCount; ++tid) {
-		pthread_join(tids[tid], NULL);
-	}
-
+    #pragma omp parallel num_threads(threadCount)
+    {   
+        int tid = omp_get_thread_num();
+        _IterateGeneration(data,tid,threadCount);
+    }   
 }
 
 void printPath(Path array){

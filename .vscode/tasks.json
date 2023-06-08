@@ -10,7 +10,8 @@
                 "${file}",
                 "-o",
                 "${fileDirname}/${fileBasenameNoExtension}",
-                "-lm"
+                "-lm",
+                "-fopenmp"
             ],
             "options": {
                 "cwd": "${fileDirname}"
